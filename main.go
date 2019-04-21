@@ -2,96 +2,119 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/gorilla/mux"
 )
 
-var wordDict [5]string
+var checked = make(map[string]bool)
+var cache = make(map[string]bool)
+
+func isWord(word string) bool {
+
+	if checked[word] {
+		return cache[word]
+	}
+
+	checked[word] = true
+	lexicalCategory := "/lexicalCategory=suffix,noun,determiner,adverb,combining_form,idiomatic,predeterminer,particle,residual,adjective,preposition,prefix,other,verb,numeral,conjunction,pronoun,interjection,contraction"
+	// lexicalCategory := "/lexicalCategory=noun%2Cverb%2Cadjective%2Cpronoun%2Cadverb%2Cpreposition%2Cconjunction%2Cinterjection"
+	url := "https://od-api.oxforddictionaries.com:443/api/v1/inflections/en/" + word + lexicalCategory
+	fmt.Println(url)
+	client := &http.Client{}
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("app_id", "958e56a8")
+	req.Header.Set("app_key", "0795baf520d159e1f54719a9e4cceec4")
+	res, error := client.Do(req)
+	if error != nil {
+		fmt.Printf("The HTTP request failed with error %s\n", error)
+	} else if res.StatusCode != 404 {
+		fmt.Println("+"+word+"+, sc:"+"%d", res.StatusCode)
+		cache[word] = true
+		return true
+	}
+	fmt.Println(string("-" + word + "-"))
+	cache[word] = true
+	return false
+}
 
 func GetCamelCase(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
-	json.NewEncoder(w).Encode(wordBreak(params["input"], wordDict))
+	json.NewEncoder(w).Encode(wordBreak(params["input"]))
 }
 
-func wordBreak(s string, wordDict [5]string) []string {
-	if len(wordDict) == 0 {
-		return []string{}
-	}
+func wordBreak(str string) []string {
 
-	dict := make(map[string]bool, len(wordDict))
-	length := make(map[int]bool, len(wordDict))
+	strLength := len(str)
 
-	for _, w := range wordDict {
-		dict[w] = true
-		length[len(w)] = true
-	}
+	solution := make([][]int, strLength)
 
-	sizes := make([]int, 0, len(length))
-	for k := range length {
-		sizes = append(sizes, k)
-	}
-	sort.Ints(sizes)
+	for i := strLength - 1; i >= 0; i-- {
 
-	n := len(s)
-
-	dp := make([]float64, len(s)+1)
-	dp[0] = 1
-
-	for i := 0; i <= n; i++ {
-		if dp[i] == 0 {
-			continue
-		}
-
-		for _, size := range sizes {
-			if i+size <= n && dict[s[i:i+size]] {
-				dp[i+size] += dp[i]
-			}
-		}
-	}
-
-	if dp[n] == 0 {
-		return []string{}
-	}
-
-	res := make([]string, 0, int(dp[n]))
-
-	// dfs
-	var dfs func(int, string)
-	dfs = func(i int, str string) {
-		if i == len(s) {
-			res = append(res, str[0:])
-			return
-		}
-
-		for _, size := range sizes {
-			if i+size <= len(s) && dict[s[i:i+size]] {
-				if i == 0 {
-					dfs(i+size, str+s[i:i+size])
-				} else {
-					dfs(i+size, str+strings.Title(s[i:i+size]))
+		for j := i + 1; j <= strLength; j++ {
+			possibleWord := str[i:j]
+			if j == strLength || len(solution[j]) > 0 {
+				if ok := isWord(possibleWord); ok == true {
+					solution[i] = append(solution[i], j)
 				}
 			}
 		}
 	}
 
-	dfs(0, "")
+	sentencePaths := [][]int{[]int{0}}
+	sentences := make([]string, 0)
 
-	return res
+	for {
+		nextSentencePaths := [][]int{}
+		for _, sentencePath := range sentencePaths {
+			sentencePathLength := len(sentencePath)
+			if sentencePath[sentencePathLength-1] == strLength {
+				lastPosition := sentencePathLength - 1
+				temp := []string{}
+				for i := 0; i < lastPosition; i++ {
+					if i == 0 {
+						temp = append(temp, str[sentencePath[i]:sentencePath[i+1]])
+					} else {
+						temp = append(temp, strings.Title(str[sentencePath[i]:sentencePath[i+1]]))
+					}
+				}
+				sentences = append(sentences, strings.Join(temp, ""))
+			} else {
+				for _, j := range solution[sentencePath[sentencePathLength-1]] {
+					newPath := append(sentencePath, j)
+					nextSentencePaths = append(nextSentencePaths, newPath)
+				}
+			}
+		}
+		if len(nextSentencePaths) == 0 {
+			break
+		} else {
+			sentencePaths = nextSentencePaths
+		}
+	}
+
+	encountered := map[string]bool{}
+
+	// Create a map of all unique elements.
+	for v := range sentences {
+		encountered[sentences[v]] = true
+	}
+
+	// Place all keys from the map into a slice.
+	result := []string{}
+	for key, _ := range encountered {
+		result = append(result, key)
+	}
+	return result
 }
 
 func main() {
 	router := mux.NewRouter()
 
-	wordDict[0] = "cat"
-	wordDict[1] = "cats"
-	wordDict[2] = "and"
-	wordDict[3] = "sand"
-	wordDict[4] = "dog"
-
 	router.HandleFunc("/camelcase/{input}", GetCamelCase).Methods("GET")
+	// fmt.Printf("%t", isWord("dog"))
 	log.Fatal(http.ListenAndServe(":8000", router))
 }
