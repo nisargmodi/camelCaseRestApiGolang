@@ -43,7 +43,7 @@ func isWord(word string) bool {
 	res, error := client.Do(req)
 	if error != nil {
 		fmt.Printf("The HTTP request failed with error %s\n", error)
-	} else if res.StatusCode != 404 {
+	} else if res.StatusCode == 200 {
 		cache[word] = true
 		return true
 	}
@@ -120,5 +120,6 @@ func wordBreak(str string) []string {
 func main() {
 	router := mux.NewRouter()
 	router.HandleFunc("/camelcase/{input}", GetCamelCase).Methods("GET")
+	// isWord("onetwo")
 	log.Fatal(http.ListenAndServe(":8000", router))
 }
