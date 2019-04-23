@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -12,6 +13,11 @@ import (
 
 var checked = make(map[string]bool)
 var cache = make(map[string]bool)
+
+type Configuration struct {
+	app_id  string
+	app_key string
+}
 
 func isWord(word string) bool {
 	if checked[word] {
@@ -22,8 +28,18 @@ func isWord(word string) bool {
 	url := "https://od-api.oxforddictionaries.com:443/api/v1/inflections/en/" + word + lexicalCategory
 	client := &http.Client{}
 	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("app_id", "958e56a8")
-	req.Header.Set("app_key", "0795baf520d159e1f54719a9e4cceec4")
+
+	file, _ := os.Open("conf.json")
+	defer file.Close()
+	decoder := json.NewDecoder(file)
+	configuration := Configuration{}
+	err := decoder.Decode(&configuration)
+	if err != nil {
+		fmt.Println("Error reading config! ", err)
+	}
+
+	req.Header.Set("app_id", configuration.app_id)
+	req.Header.Set("app_key", configuration.app_key)
 	res, error := client.Do(req)
 	if error != nil {
 		fmt.Printf("The HTTP request failed with error %s\n", error)
