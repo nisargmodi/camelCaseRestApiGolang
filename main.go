@@ -14,16 +14,12 @@ var checked = make(map[string]bool)
 var cache = make(map[string]bool)
 
 func isWord(word string) bool {
-
 	if checked[word] {
 		return cache[word]
 	}
-
 	checked[word] = true
 	lexicalCategory := "/lexicalCategory=suffix,noun,determiner,adverb,combining_form,idiomatic,predeterminer,particle,residual,adjective,preposition,prefix,other,verb,numeral,conjunction,pronoun,interjection,contraction"
-	// lexicalCategory := "/lexicalCategory=noun%2Cverb%2Cadjective%2Cpronoun%2Cadverb%2Cpreposition%2Cconjunction%2Cinterjection"
 	url := "https://od-api.oxforddictionaries.com:443/api/v1/inflections/en/" + word + lexicalCategory
-	// fmt.Println(url)
 	client := &http.Client{}
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("app_id", "958e56a8")
@@ -32,11 +28,9 @@ func isWord(word string) bool {
 	if error != nil {
 		fmt.Printf("The HTTP request failed with error %s\n", error)
 	} else if res.StatusCode != 404 {
-		fmt.Println("+"+word+"+, sc:"+"%d", res.StatusCode)
 		cache[word] = true
 		return true
 	}
-	fmt.Println(string("-" + word + "-"))
 	cache[word] = true
 	return false
 }
@@ -47,32 +41,19 @@ func GetCamelCase(w http.ResponseWriter, r *http.Request) {
 }
 
 func wordBreak(str string) []string {
-
 	strLength := len(str)
-	fmt.Println("strLength: ", strLength)
-
 	solution := make([][]int, strLength)
-	operationDone := make(chan bool)
-	count := 0
+
 	for i := strLength - 1; i >= 0; i-- {
 		for j := i + 1; j <= strLength; j++ {
 			possibleWord := str[i:j]
 			if j == strLength || len(solution[j]) > 0 {
-				count++
-				go func(i int, j int) {
-					fmt.Println("possibleWord: "+possibleWord+", i: ", i, "j: ", j)
-					if ok := isWord(possibleWord); ok == true {
-						solution[i] = append(solution[i], j)
-					}
-					operationDone <- true
-				}(i, j)
+				if ok := isWord(possibleWord); ok == true {
+					solution[i] = append(solution[i], j)
+				}
 			}
 		}
 	}
-	for i := count; i > 0; i-- {
-		<-operationDone
-	}
-	fmt.Println("count: ", count)
 
 	sentencePaths := [][]int{[]int{0}}
 	sentences := make([]string, 0)
@@ -108,12 +89,10 @@ func wordBreak(str string) []string {
 
 	encountered := map[string]bool{}
 
-	// Create a map of all unique elements.
 	for v := range sentences {
 		encountered[sentences[v]] = true
 	}
 
-	// Place all keys from the map into a slice.
 	result := []string{}
 	for key, _ := range encountered {
 		result = append(result, key)
@@ -124,8 +103,6 @@ func wordBreak(str string) []string {
 
 func main() {
 	router := mux.NewRouter()
-
 	router.HandleFunc("/camelcase/{input}", GetCamelCase).Methods("GET")
-	// fmt.Printf("%t", isWord("dog"))
 	log.Fatal(http.ListenAndServe(":8000", router))
 }
